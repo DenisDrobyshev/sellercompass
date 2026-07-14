@@ -83,7 +83,7 @@ Python · FastAPI · PostgreSQL · Redis · async collectors (httpx) · Docker C
 
 ## Status
 
-🚧 **Early development.** The project skeleton and the Wildberries collector are in; the stage engine and the AI/ML layer land next. See the [ROADMAP.md](ROADMAP.md).
+🚧 **Early development.** In: the project skeleton, the Wildberries collector, and **Stage 2 — Validate demand** (`GET /stages/demand`). Next: Stage 1 (Discover) and the remaining gates. See the [ROADMAP.md](ROADMAP.md).
 
 ## Docs
 
