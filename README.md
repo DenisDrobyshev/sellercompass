@@ -1,106 +1,170 @@
 # SellerCompass
 
-> The open-source **AI co-founder for marketplace sellers**. Go from _"I want to sell online but don't know what"_ to a **validated first product** — grounded in live marketplace data, not guesswork.
+An open-source decision pipeline for marketplace sellers. It takes a seed interest and returns a Go, Pivot, or Kill verdict on a product niche, computed from live Wildberries listing data rather than from a language model's priors.
 
-**English** · [Русский](README.ru.md)
+[![CI](https://github.com/DenisDrobyshev/sellercompass/actions/workflows/ci.yml/badge.svg)](https://github.com/DenisDrobyshev/sellercompass/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 
-![status](https://img.shields.io/badge/status-early--development-orange)
-![license](https://img.shields.io/badge/license-MIT-blue)
-![python](https://img.shields.io/badge/python-3.12-blue)
+English | [Русский](README.ru.md)
 
----
+Status: v0, under development. All five pipeline stages run against live data. Wildberries is the only supported marketplace.
 
-## The problem
+## Motivation
 
-Most people who want to start selling on a marketplace fail at step zero: **they pick the wrong product.** They either:
+Beginning sellers usually fail at product selection, before anything else is decided. Existing tools fall into two groups. Business plan generators produce narrative documents populated with invented figures. Analytics services such as MPStats, Moneyplace, Jungle Scout and Helium 10 provide accurate data but present it as a dashboard, which assumes the reader already knows which metrics matter and what threshold separates a viable niche from a bad one.
 
-- stare at a blank business-plan template — and give up, or
-- click an "AI business plan generator" that hands them a beautiful PDF full of invented numbers.
+SellerCompass encodes that judgment as a sequence of gates. Each stage computes metrics from collected listings and applies an explicit pass or fail condition. A stage that fails blocks the pipeline and reports the numbers behind the decision.
 
-Both reward **fake progress** (a nice-looking plan) over **real progress** — evidence that someone will actually buy.
+## Pipeline
 
-The tools that _do_ have real data (MPStats, Moneyplace, Jungle Scout, Helium 10) are **dashboards**: they dump numbers on you and assume you already know what to do with them. None of them take a beginner by the hand.
+| Stage | Computes | Gate condition |
+|---|---|---|
+| 1. Discover | Candidate sub-niches mined from product titles, with price and review aggregates per candidate | none (divergent stage) |
+| 2. Validate demand | Review totals across top listings, price corridor, demand trend across stored snapshots | demand above threshold and not declining |
+| 3. Competition | Brand concentration (top-3 share of review volume), price bands, rating soft spots | market not saturated and at least one opening exists |
+| 4. Unit economics | Commission, logistics, acquiring, cost of goods, advertising and tax, yielding margin and a first-batch plan | margin positive and at or above 10 percent, batch size viable |
+| 5. Decide | Combines the verdicts of stages 2 to 4 | none (terminal stage) |
 
-## What SellerCompass does differently
+Full stage definitions and gate criteria are in [METHODOLOGY.md](METHODOLOGY.md).
 
-SellerCompass is **not a dashboard and not a plan generator**. It is a **guided, stage-gated pipeline** that walks a beginner from idea to a validated first product — and **won't let them advance until each step is backed by real data.**
+## Data acquisition
 
-1. **Evidence over opinion.** Every recommendation is grounded in live marketplace data — never the LLM's imagination.
-2. **Gates, not a blank canvas.** You can't jump to "order inventory" until the demand and unit-economics gates pass.
-3. **A co-founder, not a report.** The AI explains _why_, flags risks, and tells you to **pivot or kill** when the data says so.
+Collecting Wildberries data is the constraining problem in this project, and the implementation reflects several measured facts about how the platform behaves.
 
-## The 5 stages (v0 — Wildberries)
+The public JSON endpoints (`search.wb.ru`, `card.wb.ru`, `feedbacks*.wb.ru`) rate-limit by IP address. A first request from a residential address succeeds. Subsequent requests return HTTP 429, and after repeated attempts the search endpoint returns HTTP 200 with an empty product array instead of an error, which is easy to misread as an empty market. The same limit applies to requests issued from inside a page on `wildberries.ru`, so the restriction follows the address rather than the client fingerprint.
 
-| # | Stage | What happens | Gate to pass |
-|---|-------|--------------|--------------|
-| 1 | **Discover** | Budget + interests + goals → candidate niches | — |
-| 2 | **Validate demand** | Real search volume, sales of top players, trend direction | Demand above threshold & not declining |
-| 3 | **Size up competition** | Density, price bands; NLP over competitor reviews surfaces _unmet needs_ | A real entry window exists |
-| 4 | **Unit economics** | Purchase cost, logistics, fees, ads, price → margin, break-even, budget | Margin positive & realistic |
-| 5 | **Decide** | Combined **Go / Pivot / Kill** verdict + first-batch plan + launch checklist | — |
+The rendered search page is not subject to that limit. It returns product cards while the JSON API is still refusing requests. The Selenium collector therefore drives Chrome, opens the search results page, scrolls to trigger lazy loading, and reads the cards from the DOM. One crawl of a single query yields roughly 100 products with identifier, title, brand, price, rating and review count.
 
-Full spec of each gate: [METHODOLOGY.md](METHODOLOGY.md).
+Two collectors are included:
 
-## Open-core
+`core/collectors/wildberries.py` is an async httpx client against the JSON API. It applies randomized exponential backoff on 429, paces requests, and accepts a proxy. It is faster when the address is not throttled.
 
-- **Open (this repo, MIT):** the methodology engine, the marketplace connectors, and a self-hostable local version — bring your own LLM key.
-- **Cloud (planned):** pre-collected live **and historical** marketplace data, zero setup. The **data infrastructure is the moat** — not the algorithm.
+`core/collectors/wb_selenium.py` is the Selenium collector described above. It is slower, but it returns data under throttling.
 
-## Quickstart
+Card markup uses hashed CSS module class names whose suffixes change between deployments, so selectors match on stable substrings such as `article.product-card` rather than on exact class names.
+
+## Storage
+
+Each crawl writes a batch of `ProductObservation` rows sharing a single `collected_at` timestamp. Reading the newest timestamp yields the current snapshot. Comparing review totals across timestamps yields the demand trend consumed by stage 2.
+
+SQLAlchemy defines the schema, with SQLite as the default so the project runs without external services. Set `DATABASE_URL` to use PostgreSQL instead.
+
+Historical snapshots cannot be reconstructed retroactively, which is why collection is designed to run repeatedly over time rather than once on demand.
+
+## Installation
 
 ```bash
 git clone https://github.com/DenisDrobyshev/sellercompass
 cd sellercompass
-cp .env.example .env          # add your LLM key; set WB_PROXY_URL if needed
-
-# Option A — Docker (API + Postgres + Redis)
-docker compose up --build     # -> http://localhost:8000/docs
-
-# Option B — local Python
+cp .env.example .env
 pip install -e ".[dev]"
-uvicorn core.main:app --reload
-
-# Smoke-test the httpx collector (fast, but WB may throttle the IP)
-python -m core.collectors.wildberries "чехол для iphone"
-
-# Collect real data with the browser spider (beats IP throttling) + store a snapshot
-python -m core.collectors.wb_selenium "чехол для iphone"
-
-# Stage 1 — mine candidate niches from a stored snapshot
-python -m core.engine.discover --db "чехол для iphone"
-
-# Validate demand from stored snapshots (trend appears once you have >= 2)
-python -m core.engine.demand --db "чехол для iphone"
 ```
 
-> **Heads-up on data.** Wildberries rate-limits IPs with HTTP 429 — even a browser's direct API calls. The **Selenium spider** sidesteps this: it drives a real Chrome, opens the search page like a person, and reads the product cards the page renders, so data flows even when the raw API is blocked. The httpx collector remains for fast API access with backoff, throttling, and `WB_PROXY_URL` support.
+The Selenium collector requires a local Chrome installation. Selenium Manager resolves the driver automatically.
 
-## Project layout
+## Usage
+
+Collect a snapshot, then run stages against the stored data:
+
+```bash
+python -m core.collectors.wb_selenium "термокружка"             # crawl and store a snapshot
+python -m core.engine.discover       --db "термокружка"          # stage 1
+python -m core.engine.demand         --db "термокружка"          # stage 2
+python -m core.engine.competition    --db "термокружка"          # stage 3
+python -m core.engine.unit_economics --db "термокружка" 100000   # stage 4, budget in RUB
+python -m core.engine.decide         --db "термокружка" 100000   # stage 5
+```
+
+The HTTP API exposes the same stages:
+
+```bash
+uvicorn core.main:app --reload      # http://localhost:8000/docs
+```
+
+| Endpoint | Stage |
+|---|---|
+| `GET /stages/discover?seed=&budget=` | 1 |
+| `GET /stages/demand?query=` | 2 |
+| `GET /stages/competition?query=` | 3 |
+| `GET /stages/economics?query=&price=&budget=&cogs=` | 4 |
+| `GET /stages/decide?query=&budget=` | 5 |
+
+A Docker Compose file starts the API with PostgreSQL and Redis:
+
+```bash
+docker compose up --build
+```
+
+## Example
+
+Output of stage 5 for the query `термокружка` with a budget of 100 000 RUB, computed from a stored snapshot of 100 listings:
+
+```
+Stage 5 . Decide - 'термокружка'
+   verdict: PIVOT
+   stage 2 demand:      PASS (score 1.0)
+   stage 3 competition: FAIL (score 0.08)
+   stage 4 economics:   PASS (score 0.13)
+   demand exists, but the market has no entry window - try an adjacent niche
+
+  First-batch plan:
+   price 529.5 RUB | margin 69.73 RUB/unit
+   539 units for 99887.48 RUB
+   projected profit 37584.47 RUB (ROI 37%)
+```
+
+The verdict is PIVOT because the three top brands hold 92 percent of review volume in that niche, although demand is high and the unit economics clear the margin floor.
+
+## Repository layout
 
 ```
 core/
-  api/          FastAPI routes
-  collectors/   Wildberries collectors — httpx API + Selenium browser spider
-  engine/       stage-gate engine (Stage 2: demand + trend)
-  models/       normalized data models
-  storage/      snapshot persistence (SQLAlchemy)
-tests/          unit tests (CI: ruff + pytest)
+  api/          FastAPI routes (health, five stage endpoints)
+  collectors/   Wildberries collectors: httpx API client and Selenium spider
+  engine/       stage-gate engine: discover, demand, competition, unit_economics, decide
+  models/       normalized, marketplace-agnostic product model
+  storage/      SQLAlchemy models and snapshot repository
+tests/          30 unit tests, no network access required
 ```
 
-## Tech
+## Design decisions
 
-Python · FastAPI · SQLAlchemy (SQLite / Postgres) · httpx · Selenium · Docker Compose. Planned: LLM orchestration + RAG over market data, and ML — demand forecasting, niche scoring, review NLP. See [ARCHITECTURE.md](ARCHITECTURE.md).
+The project is open core. Engine, collectors and self-hosted deployment are MIT licensed. A hosted service holding pre-collected historical data is planned separately. The defensible asset is the collection infrastructure and the accumulated time series, not the scoring code, which is short and easy to reproduce.
 
-## Status
+Stage 3 measures concentration by brand rather than by seller because search cards expose brand and omit seller. Grouping review volume by brand approximates market structure using data that is actually retrievable.
 
-🚧 **Early development.** In: the project skeleton, two Wildberries collectors (httpx + a Selenium browser spider that beats IP throttling), snapshot storage, **Stage 1 — Discover** (mines candidate niches from real listings), **Stage 2 — Validate demand** (with a trend gate), **Stage 3 — Competition** (brand concentration, price bands, entry-window gate), **Stage 4 — Unit economics** (WB fee model, margin, first-batch plan), and **Stage 5 — Decide** (Go / Pivot / Kill + first-batch plan + launch checklist) — **the v0 funnel is complete**. Next: a collection scheduler and a review feed. See the [ROADMAP.md](ROADMAP.md).
+Stage 3 also uses rating soft spots, meaning popular listings with mediocre ratings, as a stand-in for unmet customer needs. The methodology calls for mining competitor reviews directly. `analyze_reviews` in `core/engine/competition.py` implements that extraction and is covered by tests, but it has no data source yet (see limitations).
 
-## Docs
+Gate thresholds are module-level constants rather than learned parameters. They are calibrated by hand and documented next to the code that applies them, so a seller can adjust them for a category without retraining anything.
 
-- [METHODOLOGY.md](METHODOLOGY.md) — the stage-gate engine in detail
-- [ARCHITECTURE.md](ARCHITECTURE.md) — stack, data pipeline, AI/ML layer
-- [ROADMAP.md](ROADMAP.md) — where this is going
+Fee assumptions in stage 4 are function parameters with defaults, so a seller with real supplier quotes and category commissions can substitute them without editing the model.
+
+## Known limitations
+
+Review text is not collected. The JSON feedback endpoints are rate-limited, and the reviews page uses hashed class names with seller replies interleaved among buyer reviews. Stage 3 therefore relies on rating soft spots rather than complaint mining.
+
+Trend classification requires at least two snapshots separated in time. A single crawl reports the trend as unknown, and stage 2 falls back to demand level alone.
+
+Stage 4 fee defaults are category-independent approximations of Wildberries commission, logistics and advertising costs. They produce a realistic first pass, not an accounting figure.
+
+The Selenium collector requires a local Chrome installation. Chrome intermittently fails to start on repeated launches within one session; rerunning the command resolves it.
+
+Only Wildberries is supported. Ozon and Amazon connectors are on the roadmap and are the intended test of whether the collector interface is genuinely marketplace-agnostic.
+
+## Testing
+
+The test suite covers price parsing, snapshot persistence, trend classification, niche mining, and every gate condition. All tests run offline. GitHub Actions runs `ruff` and `pytest` on each push.
+
+```bash
+ruff check core tests
+pytest -q
+```
+
+## Documentation
+
+[METHODOLOGY.md](METHODOLOGY.md) defines each stage and its gate. [ARCHITECTURE.md](ARCHITECTURE.md) covers components and data flow. [ROADMAP.md](ROADMAP.md) lists completed and planned work.
 
 ## License
 
-[MIT](LICENSE) © 2026 Denis Drobyshev
+[MIT](LICENSE), Copyright 2026 Denis Drobyshev.

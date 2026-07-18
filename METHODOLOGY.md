@@ -1,74 +1,72 @@
-# Methodology — the stage-gate engine
+# Methodology
 
-SellerCompass's core is not the AI chat. It is a **state machine** with five stages. Each stage has:
-
-- **inputs** it consumes,
-- **data** it pulls from the live marketplace,
-- **outputs** it produces,
-- a **gate** — an explicit, data-driven pass/fail check. You cannot advance while a gate fails.
-
-This is what makes SellerCompass honest: it refuses to let you feel productive without evidence.
+The engine is a state machine over five stages. Each stage declares the inputs it consumes, the data it collects, the output it produces, and a gate: an explicit pass or fail condition computed from that data. The pipeline does not advance past a failed gate.
 
 ```
-[Discover] -> [Validate demand] -> [Size up competition] -> [Unit economics] -> [Decide]
-     |               | gate               | gate                  | gate            |
-  candidates    demand proven        entry window          margin proven      Go/Pivot/Kill
+Discover -> Validate demand -> Competition -> Unit economics -> Decide
+                  gate            gate            gate
 ```
 
----
+Each section states the intent of a stage and then its contract. Where the v0 implementation differs from the intent, the difference is stated.
 
-## Stage 1 — Discover
+## Stage 1. Discover
 
-**Goal:** turn a vague wish into a short list of concrete candidate niches.
+Purpose: convert a stated interest into a short list of concrete candidate niches.
 
-- **Inputs:** budget for the first batch, interests / domains the user knows, goal (side income vs. main business), risk appetite.
-- **Data:** top-level category demand and dynamics on the marketplace.
-- **Output:** 5–10 candidate niches, each with a one-line rationale.
-- **Gate:** none (divergent stage — we _want_ options here).
+Inputs: first-batch budget, domains the user already knows, goal, risk tolerance.
+Data: listings returned for the seed query.
+Output: candidate niches, each with product count, median price and review total.
+Gate: none. The stage is divergent and is expected to produce options.
 
-## Stage 2 — Validate demand
+Implementation: candidates are two and three word n-grams mined from product titles that specialise the seed. A candidate must appear in at least three listings to be reported.
 
-**Goal:** prove that people actually want this, before spending a rouble.
+## Stage 2. Validate demand
 
-- **Inputs:** candidate niches from Stage 1.
-- **Data:** search-query volume, estimated sales of the top sellers, month-over-month trend, seasonality.
-- **Output:** a demand score + trend label (growing / flat / declining) per niche.
-- **Gate:** demand is **above the minimum threshold** AND **not in structural decline**. Declining niches are dropped or flagged.
+Purpose: establish that buyers exist before money is committed.
 
-## Stage 3 — Size up competition
+Inputs: a candidate niche.
+Data: review totals across top listings, price distribution, review totals of earlier snapshots.
+Output: demand score, price corridor, trend label (growing, flat, declining, unknown).
+Gate: demand above the minimum threshold and not declining.
 
-**Goal:** find out whether there is room to enter — and what your angle would be.
+Implementation: review volume is used as the sales proxy, since Wildberries does not publish unit sales. Trend classification requires at least two snapshots. With a single snapshot the trend is unknown and the gate relies on demand level alone.
 
-- **Inputs:** niches that passed Stage 2.
-- **Data:** number of active sellers, concentration (are the top 3 eating everything?), price bands, review counts and ratings of incumbents, and **the text of competitor reviews**.
-- **AI/ML:** aspect-based NLP over competitor reviews to surface **recurring complaints** = unmet needs = your differentiation.
-- **Output:** a competition-density index, a price corridor, and a list of concrete "customers are unhappy about X" openings.
-- **Gate:** an **entry window exists** — competition is not saturated _and_ there is at least one credible way to be better.
+## Stage 3. Competition
 
-## Stage 4 — Unit economics
+Purpose: determine whether room to enter exists, and on what basis a newcomer could compete.
 
-**Goal:** prove the money works before ordering inventory.
+Inputs: a niche that passed stage 2.
+Data: brand distribution, review volume per brand, price bands, ratings of leading listings, and the text of competitor reviews.
+Output: concentration index, price corridor, list of openings.
+Gate: the market is not saturated and at least one opening exists.
 
-- **Inputs:** the chosen niche + price corridor from Stage 3.
-- **Data:** marketplace commission for the category, logistics/fulfilment fees, realistic ad cost per sale; purchase cost estimated (rough or user-supplied).
-- **Output:** per-unit margin, break-even volume, and the **budget required for a viable first batch**.
-- **Gate:** margin is **positive and realistic** given the price corridor and the user's budget. If the budget can't fund a viable batch, we say so.
+Implementation: concentration is the share of review volume held by the three largest brands, with a saturation threshold of 60 percent. Openings are listings with at least 200 reviews and a rating at or below 4.4, treated as evidence that buyers are not satisfied with the current leaders. Review text is not collected yet. `analyze_reviews` implements complaint extraction and is covered by tests, but it has no data source.
 
-## Stage 5 — Decide
+## Stage 4. Unit economics
 
-**Goal:** a verdict you can act on tomorrow morning.
+Purpose: establish that the money works before inventory is ordered.
 
-- **Inputs:** the passed/failed gates and scores from all previous stages.
-- **Output:**
-  - a combined **Go / Pivot / Kill** verdict with the reasoning,
-  - a concrete **first-batch plan** (how many SKUs, how many units, at what budget),
-  - a **launch checklist**.
-- **Gate:** none — this is the exit.
+Inputs: the niche and its price corridor, the first-batch budget, optionally the purchase cost.
+Data: category commission, logistics and acquiring fees, advertising cost per sale, tax, cost of goods.
+Output: per-unit margin and margin share, first-batch size, required investment, projected profit and return on investment.
+Gate: margin positive and at or above 10 percent, batch size at least 10 units.
 
----
+Implementation: every fee assumption is a function parameter with a default. Cost of goods defaults to 35 percent of the selling price when the user does not supply a supplier quote.
 
-## Design rules for the engine
+## Stage 5. Decide
 
-- **Every gate cites its data.** No "trust me" verdicts — the number and its source are always shown.
-- **Pivot is a first-class outcome.** Failing a gate is not an error; it routes the user back to the last viable branch (e.g. a different niche from Stage 1).
-- **The LLM explains, the data decides.** Gates are computed from data. The LLM's job is to interpret intent, explain verdicts in plain language, and mine reviews — not to invent the numbers.
+Purpose: produce a verdict that can be acted on.
+
+Inputs: gate results of stages 2 to 4.
+Output: a Go, Pivot or Kill verdict, a first-batch plan, a launch checklist.
+Gate: none. The stage terminates the pipeline.
+
+Decision rule: absence of demand yields Kill. Demand combined with a closed market or unworkable economics yields Pivot. All gates passing yields Go.
+
+## Engine rules
+
+Every gate reports the values it used. A verdict without its supporting numbers is not acceptable output.
+
+A failed gate is a routing decision rather than an error. It returns the user to the last viable branch, normally another candidate from stage 1.
+
+Gates are computed from data. A language model may interpret user intent, phrase a verdict in plain language, or extract themes from review text. It does not produce the numbers a gate depends on.

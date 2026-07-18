@@ -1,44 +1,45 @@
 # Roadmap
 
-The strategy is **start narrow, prove the engine, then widen**. One marketplace, one killer outcome, real users — before anything else.
+The sequence is deliberate: one marketplace, one complete pipeline, real users, before any widening of scope.
 
-## v0 — MVP (open-source, Wildberries)
+## v0. Wildberries, self-hosted (current)
 
-The whole 5-stage pipeline for **Wildberries only**, self-hostable locally.
+- [x] Wildberries collectors: httpx JSON client and Selenium DOM spider
+- [x] Snapshot storage with timestamps, which makes trend analysis possible
+- [x] Stage 1, Discover: `GET /stages/discover`
+- [x] Stage 2, Validate demand: `GET /stages/demand`
+- [x] Stage 3, Competition: `GET /stages/competition`
+- [x] Stage 4, Unit economics: `GET /stages/economics`
+- [x] Stage 5, Decide: `GET /stages/decide`
+- [ ] Onboarding flow that collects budget, interests and goal
+- [ ] Scheduled collection, so trend classification has real separation in time
+- [ ] Review feed for the complaint extraction in stage 3
+- [ ] Verified single-command Docker Compose deployment
 
-- [ ] Onboarding: budget, interests, goal
-- [x] Wildberries data connector — httpx API + Selenium browser spider (beats IP throttling)
-- [x] Historization: timestamped snapshots in SQLite/Postgres (enables demand trend)
-- [x] Stage 1 — Discover (candidate niches) — `GET /stages/discover`
-- [x] Stage 2 — Validate demand (+ gate) — `GET /stages/demand`
-- [x] Stage 3 — Competition: brand concentration + price bands + rating soft-spots (+ gate); review-NLP engine built, awaiting a review feed
-- [x] Stage 4 — Unit economics (+ gate) — `GET /stages/economics`
-- [x] Stage 5 — Decide: Go/Pivot/Kill verdict + first-batch plan + launch checklist — `GET /stages/decide`
-- [ ] One-command Docker Compose self-host
+Completion criterion: ten beginning sellers run the pipeline end to end.
 
-**Success = 10 real beginner sellers run it end-to-end + first GitHub stars.**
+## v1. Hosted service and Ozon
 
-## v1 — Hosted + Ozon
+- [ ] Ozon connector, which tests whether the collector interface is genuinely marketplace-agnostic
+- [ ] Hosted deployment serving pre-collected current and historical data
+- [ ] Accounts and a paid tier
 
-- [ ] Ozon connector (proves the architecture is marketplace-agnostic)
-- [ ] Hosted version with pre-collected live + historical data (zero setup)
-- [ ] Accounts + a basic paid tier (the cloud half of open-core)
+Completion criterion: first paying users.
 
-**Success = first paying users.**
+## v2. Non-Russian marketplaces
 
-## v2 — Go global
-
-- [ ] Amazon / Etsy connectors (English-speaking market)
+- [ ] Amazon and Etsy connectors
 - [ ] Community-contributed connectors
-- [ ] Expand beyond "first product" toward ongoing seller growth
+- [ ] Coverage beyond the first product, toward ongoing seller operations
 
----
+## Out of scope
 
-## Explicitly NOT in scope (for now)
+The following are excluded deliberately rather than overlooked.
 
-Keeping these out is a feature, not an omission:
+Managing an already operating business, such as repricing and stock control, is covered by sellerboard and comparable tools.
 
-- Managing an already-running business (repricing, stock management) — that's sellerboard's territory, not ours.
-- Supplier sourcing / auto-purchasing (1688, etc.).
-- A mobile app.
-- Real billing infrastructure before the local version has proven its value.
+Supplier sourcing and purchasing.
+
+A mobile application.
+
+Billing infrastructure, until the self-hosted version demonstrates value.

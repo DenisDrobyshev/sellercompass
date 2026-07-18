@@ -1,73 +1,69 @@
 # Architecture
 
-SellerCompass is built around one hard, valuable problem — **acquiring and historizing real marketplace data** — with an AI/ML layer on top that turns that data into decisions.
+Three layers: collection, storage, and the stage-gate engine, with an HTTP API and a set of CLI entry points in front of them. Collection is the layer that constrains the rest of the design, for the reasons documented under data acquisition in [README.md](README.md).
 
 ```mermaid
 flowchart TD
-    U[User: budget, interests, goal] --> W[Guided wizard UI]
-    W --> API[FastAPI backend]
+    CLI[CLI entry points] --> ENG
+    API["FastAPI: /stages/*"] --> ENG
 
-    subgraph engine [Stage-gate engine  ·  state machine]
-        S1[Discover] --> S2[Validate demand] --> S3[Competition] --> S4[Unit economics] --> S5[Decide]
+    subgraph ENG [Stage-gate engine]
+        S1[discover] --> S2[demand] --> S3[competition] --> S4[unit_economics] --> S5[decide]
     end
-    API --> engine
 
-    subgraph ai [AI / ML layer]
-        LLM[LLM orchestration + RAG over market data]
-        FC[Demand forecasting]
-        SC[Niche scoring]
-        NLP[Review NLP: unmet-needs mining]
-    end
-    engine --> ai
+    ENG --> REPO[storage.repo]
+    REPO --> DB[("SQLite or PostgreSQL")]
 
-    subgraph data [Data pipeline  ·  the moat]
-        COL[Async collectors: httpx / Playwright] --> NORM[Normalize] --> HIST[Historize]
-    end
-    ai --> data
+    SEL[wb_selenium: Chrome DOM] --> NORM[Product model]
+    HTTPX[wildberries: httpx JSON] --> NORM
+    NORM --> REPO
 
-    HIST --> PG[(PostgreSQL: niches, products, prices, history)]
-    COL --> REDIS[(Redis: cache + queues)]
-    data --> MP[[Wildberries public catalog & search]]
+    SEL --> PAGE[["wildberries.ru search page"]]
+    HTTPX --> JSON[["search.wb.ru JSON API"]]
 ```
 
-## Components
+## Collection
 
-### 1. Guided wizard UI
-A thin, linear front end that renders one stage at a time and its gate result. Not a dashboard — a wizard. (v0 can be a lightweight server-rendered UI; a richer SPA can come later.)
+Both collectors implement the `MarketplaceCollector` interface in `core/collectors/base.py` and return the same normalized objects, so the engine never learns which one produced its input.
 
-### 2. FastAPI backend
-Async Python API. Owns the session, drives the stage-gate engine, exposes each stage's result to the UI.
+`wildberries.py` is an async httpx client for the public JSON search endpoint. It paces requests, retries on HTTP 429 with randomized exponential backoff, and routes through a proxy when `WB_PROXY_URL` is set. Price extraction handles both the current schema, where prices sit under `sizes[].price`, and the older top-level `priceU` and `salePriceU` fields, because the endpoint version changes without notice.
 
-### 3. Stage-gate engine
-The heart (see [METHODOLOGY.md](METHODOLOGY.md)). A **state machine** — each stage is a node with a pass/fail gate. A failed gate routes back to the last viable branch (pivot). Deterministic and testable: gates are computed from data, not from the LLM.
+`wb_selenium.py` drives Chrome, loads the rendered search page, scrolls to trigger lazy loading, and parses product cards from the DOM. It exists because the JSON endpoints refuse requests from a rate-limited address while the page continues to serve results. Selectors match on stable class-name substrings, since Wildberries uses hashed CSS module names.
 
-### 4. Data pipeline — the moat
-- **Collectors:** async workers that pull the Wildberries **public** catalog, search suggestions, result rankings, prices, and reviews (`httpx` for JSON endpoints, `Playwright` for JS-rendered pages).
-- **Normalize:** raw payloads → a clean product/price/review schema.
-- **Historize:** snapshots over time so we can compute trends and seasonality — this accumulating history is itself a competitive moat (it can't be back-filled later).
+## Normalization
 
-> **Note on data acquisition.** Official marketplace APIs mainly return _your own_ sales, not competitors'. Market research therefore relies on the **public** catalog — the same source MPStats & co. use. This pipeline is deliberately the hardest and most defensible part of the system.
+`core/models/product.py` defines a single marketplace-agnostic `Product`: external identifier, optional group identifier, title, brand, seller, current and pre-discount price in rubles, rating, review count, and URL. Adding a marketplace means writing a collector that produces this shape, not changing the engine.
 
-### 5. AI / ML layer
-- **LLM orchestration + RAG:** the LLM reasons over **retrieved real data**, so verdicts are grounded, not hallucinated. Bring-your-own-key in the open-source build.
-- **Demand forecasting:** time-series over historized sales/search data (start simple — Prophet / statsmodels / gradient boosting).
-- **Niche scoring:** a composite, later learnable, score that ranks candidates.
-- **Review NLP:** aspect-based sentiment / topic extraction to surface recurring complaints = unmet needs.
+## Storage
 
-### 6. Storage
-- **PostgreSQL** — niches, products, prices, reviews, and their history.
-- **Redis** — cache + task queues for the collectors.
+`core/storage/` holds the SQLAlchemy model, the engine factory, and a repository. Each crawl inserts a batch of `ProductObservation` rows that share one `collected_at` timestamp and carry the rank of the product in the result list.
 
-## Open-core split (in the repo layout)
+Three operations serve the engine: write a snapshot, read the most recent snapshot for a query, and read review totals grouped by timestamp. The last of these produces the series that stage 2 uses to classify trend.
 
-```
-sellercompass/
-├── core/        # OPEN (MIT): stage-gate engine, connectors, ML, self-host app
-└── cloud/       # PLANNED, proprietary: hosted service, pre-collected data, billing
-```
+SQLite is the default so the project runs with no external services. Setting `DATABASE_URL` switches to PostgreSQL without other changes.
 
-The open `core/` is fully runnable on its own — that is what earns stars and goes in a portfolio. `cloud/` monetizes the managed data infrastructure, not the algorithm.
+## Stage-gate engine
+
+`core/engine/stages.py` defines the stage enumeration and `GateResult`, which carries the pass flag, a score, the list of reasons, and an evidence dictionary holding the metrics behind the decision. Every stage returns this shape.
+
+Each stage module separates a pure analysis function from the gate that interprets it. `analyze_demand` computes metrics and `validate_demand` applies thresholds; `analyze_competition` and `evaluate_competition` follow the same split, as do `compute_unit_economics` and `evaluate_unit_economics`. The pure functions take plain lists of `Product` objects and no I/O, which is why the whole test suite runs offline.
+
+`decide.py` runs stages 2 to 4 over one snapshot and reduces their gate results to a single verdict, a first-batch plan and a launch checklist.
+
+## Interfaces
+
+Every stage is reachable two ways. The CLI modules accept `--db` to read the stored snapshot, and the FastAPI routes in `core/api/stages.py` expose the same computation over HTTP. Stage 2 additionally supports a live path through the httpx collector.
 
 ## Deployment
 
-One-command self-host via **Docker Compose** (API + Postgres + Redis + worker). Bring your own LLM key.
+`docker-compose.yml` starts the API together with PostgreSQL and Redis. Local development needs neither: `pip install -e ".[dev]"` and SQLite are sufficient. Redis is provisioned for the collection scheduler, which is not implemented yet.
+
+## Planned components
+
+A scheduler that runs collection repeatedly, so trend classification operates on snapshots genuinely separated in time.
+
+A review feed to supply `analyze_reviews`, which already implements complaint extraction and is tested, but currently has no source of review text.
+
+A language model layer that phrases verdicts and interprets user intent. It will read the evidence dictionaries produced by the gates and will not compute gate values.
+
+A separate `cloud/` package for the hosted service, holding pre-collected current and historical data. The open `core/` package remains independently runnable.
