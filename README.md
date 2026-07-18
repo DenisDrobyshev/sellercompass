@@ -8,6 +8,8 @@ An open-source decision pipeline for marketplace sellers. It takes a seed intere
 
 English | [Русский](README.ru.md)
 
+The repository is mirrored at [GitLab](https://gitlab.com/DenisDrobyshev/sellercompass).
+
 Status: v0, under development. All five pipeline stages run against live data. Wildberries is the only supported marketplace.
 
 ## Motivation
