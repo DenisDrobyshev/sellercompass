@@ -7,6 +7,7 @@ from core.collectors.wildberries import WildberriesCollector
 from core.engine.competition import evaluate_competition
 from core.engine.demand import validate_demand
 from core.engine.discover import discover_from_products
+from core.engine.unit_economics import evaluate_unit_economics
 from core.storage.repo import latest_snapshot
 
 router = APIRouter(prefix="/stages", tags=["stages"])
@@ -84,6 +85,39 @@ async def demand(query: str = Query(..., min_length=2), limit: int = 100) -> dic
     return {
         "stage": result.stage.value,
         "query": query,
+        "passed": result.passed,
+        "score": result.score,
+        "reasons": result.reasons,
+        "evidence": result.evidence,
+    }
+
+
+@router.get("/economics")
+def economics(
+    query: str = Query(..., min_length=2),
+    price: float | None = None,
+    budget: float | None = None,
+    cogs: float | None = None,
+) -> dict:
+    """Stage 4 — unit economics (price falls back to the stored snapshot median)."""
+    if price is None:
+        products = latest_snapshot(query)
+        prices = sorted(p.price for p in products if p.price)
+        if not prices:
+            return {
+                "stage": "unit_economics",
+                "query": query,
+                "passed": False,
+                "note": f'no price - pass ?price= or crawl first: '
+                        f'python -m core.collectors.wb_selenium "{query}"',
+            }
+        price = prices[len(prices) // 2]
+    extra = {} if cogs is None else {"cogs": cogs}
+    result = evaluate_unit_economics(query, price, budget=budget, **extra)
+    return {
+        "stage": result.stage.value,
+        "query": query,
+        "price": price,
         "passed": result.passed,
         "score": result.score,
         "reasons": result.reasons,
