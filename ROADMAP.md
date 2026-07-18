@@ -13,7 +13,7 @@ The whole 5-stage pipeline for **Wildberries only**, self-hostable locally.
 - [x] Stage 2 — Validate demand (+ gate) — `GET /stages/demand`
 - [x] Stage 3 — Competition: brand concentration + price bands + rating soft-spots (+ gate); review-NLP engine built, awaiting a review feed
 - [x] Stage 4 — Unit economics (+ gate) — `GET /stages/economics`
-- [ ] Stage 5 — Decide: Go/Pivot/Kill verdict + first-batch plan + launch checklist
+- [x] Stage 5 — Decide: Go/Pivot/Kill verdict + first-batch plan + launch checklist — `GET /stages/decide`
 - [ ] One-command Docker Compose self-host
 
 **Success = 10 real beginner sellers run it end-to-end + first GitHub stars.**
