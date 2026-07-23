@@ -11,6 +11,7 @@ from core.engine.discover import discover_from_products
 from core.engine.onboarding import SellerProfile, recommend
 from core.engine.pipeline import run_pipeline
 from core.engine.unit_economics import evaluate_unit_economics
+from core.llm import explain_decision
 from core.storage.repo import latest_snapshot
 
 router = APIRouter(prefix="/stages", tags=["stages"])
@@ -55,6 +56,7 @@ def pipeline(query: str = Query(..., min_length=2), budget: float | None = None)
         "verdict": result.evidence["verdict"],
         "score": result.score,
         "reasons": result.reasons,
+        "explanation": explain_decision(report.decision),
         "plan": report.decision.plan,
         "checklist": report.decision.checklist,
         "adjacent_niches": [
@@ -192,7 +194,8 @@ def decide_stage(query: str = Query(..., min_length=2), budget: float | None = N
             "note": f'no stored snapshot - crawl first: python -m core.collectors.wb_selenium "{query}"',
         }
     trend = trend_from_db(query)
-    result = to_gate_result(decide(query, products, budget=budget, trend=trend))
+    decision = decide(query, products, budget=budget, trend=trend)
+    result = to_gate_result(decision)
     return {
         "stage": result.stage.value,
         "query": query,
@@ -200,5 +203,6 @@ def decide_stage(query: str = Query(..., min_length=2), budget: float | None = N
         "passed": result.passed,
         "score": result.score,
         "reasons": result.reasons,
+        "explanation": explain_decision(decision),
         "evidence": result.evidence,
     }

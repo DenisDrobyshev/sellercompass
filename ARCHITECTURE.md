@@ -50,20 +50,20 @@ Each stage module separates a pure analysis function from the gate that interpre
 
 `decide.py` runs stages 2 to 4 over one snapshot and reduces their gate results to a single verdict, a first-batch plan and a launch checklist.
 
+## Explanation layer
+
+`core/llm.py` turns a finished decision into a short plain-language summary. It builds a compact brief from the gate evidence and either sends it to Claude through the Anthropic SDK, when `LLM_API_KEY` is set, or renders a deterministic template when it is not. The model is instructed to explain only the supplied numbers, so the layer reads the gates' output and never computes a gate value. Any error falls back to the template, so the caller always receives a usable string.
+
 ## Interfaces
 
-Every stage is reachable two ways. The CLI modules accept `--db` to read the stored snapshot, and the FastAPI routes in `core/api/stages.py` expose the same computation over HTTP. Stage 2 additionally supports a live path through the httpx collector.
+Every stage is reachable two ways. The CLI modules accept `--db` to read the stored snapshot, and the FastAPI routes in `core/api/stages.py` expose the same computation over HTTP. Stage 2 additionally supports a live path through the httpx collector. `core/main.py` also serves a single-page web interface at the root path, built on the pipeline endpoint, with the page itself in `core/web/`.
 
 ## Deployment
 
-`docker-compose.yml` starts the API together with PostgreSQL and Redis. Local development needs neither: `pip install -e ".[dev]"` and SQLite are sufficient. Redis is provisioned for the collection scheduler, which is not implemented yet.
+`docker-compose.yml` starts the API together with PostgreSQL and Redis. Local development needs neither: `pip install -e ".[dev]"` and SQLite are sufficient. Redis is provisioned for optional use alongside the collection scheduler.
 
 ## Planned components
 
-A scheduler that runs collection repeatedly, so trend classification operates on snapshots genuinely separated in time.
-
 A review feed to supply `analyze_reviews`, which already implements complaint extraction and is tested, but currently has no source of review text.
-
-A language model layer that phrases verdicts and interprets user intent. It will read the evidence dictionaries produced by the gates and will not compute gate values.
 
 A separate `cloud/` package for the hosted service, holding pre-collected current and historical data. The open `core/` package remains independently runnable.

@@ -15,9 +15,12 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///sellerhelper.db"
     redis_url: str = "redis://localhost:6381/0"
 
-    # LLM — bring your own key in the open-source build.
+    # LLM — bring your own key in the open-source build. With no key the
+    # explanation layer falls back to a deterministic template, so the tool runs
+    # fully offline. Point llm_model at a cheaper model (e.g. claude-haiku-4-5)
+    # to cut per-explanation cost.
     llm_api_key: str = ""
-    llm_model: str = ""
+    llm_model: str = "claude-opus-4-8"
 
     # Wildberries collectors.
     wb_proxy_url: str = ""

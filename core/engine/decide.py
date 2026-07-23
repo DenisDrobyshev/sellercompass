@@ -114,6 +114,9 @@ def _print(d: Decision) -> None:
     print(f"\nStage 5 . Decide - {d.query!r}")
     for reason in result.reasons:
         print(f"   {reason}")
+    from core.llm import explain_decision
+
+    print(f"\n   {explain_decision(d)}")
     p = d.plan
     if p.get("batch_units"):
         print("\n  First-batch plan:")

@@ -41,6 +41,9 @@ def _print(report: PipelineReport) -> None:
     print(f"verdict: {result.evidence['verdict']}   (combined score {result.score})")
     for reason in result.reasons:
         print(f"   {reason}")
+    from core.llm import explain_decision
+
+    print(f"\n   {explain_decision(decision)}")
     plan = decision.plan
     if plan.get("batch_units"):
         print("\n  First-batch plan:")

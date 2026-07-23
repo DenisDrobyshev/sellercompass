@@ -16,6 +16,8 @@ The sequence is deliberate: one marketplace, one complete pipeline, real users, 
 - [x] Onboarding flow: a profile (budget, interests, goal) ranked into a recommendation (`core.engine.onboarding`, `GET /stages/recommend`)
 - [x] Review digest (WB's aggregated summary and aspect facets) wired into Stage 3 as customer voice; raw per-review complaint mining still awaits a source
 - [x] Docker Compose that runs with no configuration (SQLite volume, healthcheck, no `.env` required); compose config validated
+- [x] Explanation layer: a language model renders the verdict in plain language, grounded strictly on the gate figures, with a deterministic template fallback when no key is set (`core/llm.py`)
+- [x] Web interface: a self-contained single page served at the root path that runs the pipeline and presents the verdict, explanation, first-batch plan and adjacent niches
 
 Completion criterion: ten beginning sellers run the pipeline end to end.
 

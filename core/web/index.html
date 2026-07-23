@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SellerHelper</title>
+  <style>
+    :root {
+      --bg: #f6f7f9; --panel: #ffffff; --ink: #14181f; --muted: #5b6572;
+      --line: #e3e7ec; --accent: #2f6feb; --accent-ink: #ffffff;
+      --go: #1f9d55; --go-bg: #e6f4ec; --pivot: #b7791f; --pivot-bg: #fbf1dd;
+      --kill: #c0392b; --kill-bg: #f8e4e1; --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1216; --panel: #171b21; --ink: #e7ebf0; --muted: #97a1ad;
+        --line: #262c34; --accent: #4c85f2; --accent-ink: #0b0e12;
+        --go: #4ecb8a; --go-bg: #12281d; --pivot: #e0b24d; --pivot-bg: #2a2313;
+        --kill: #e97b6d; --kill-bg: #2c1613;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+    header { margin-bottom: 24px; }
+    h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.2px; }
+    .tag { color: var(--muted); font-size: 14px; max-width: 640px; }
+    form {
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: end;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+    }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field.grow { flex: 1 1 260px; }
+    label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+    input {
+      background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+      border-radius: 8px; padding: 10px 12px; font-size: 15px; width: 100%;
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    button {
+      background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px;
+      padding: 11px 20px; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .status { margin: 22px 2px; color: var(--muted); }
+    .status code {
+      display: inline-block; margin-top: 6px; padding: 4px 8px; background: var(--panel);
+      border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 13px; color: var(--ink);
+    }
+    main { margin-top: 24px; display: grid; gap: 16px; }
+    .verdict { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .badge {
+      font-weight: 700; font-size: 14px; letter-spacing: 0.6px; padding: 6px 14px; border-radius: 999px;
+    }
+    .badge.GO { color: var(--go); background: var(--go-bg); }
+    .badge.PIVOT { color: var(--pivot); background: var(--pivot-bg); }
+    .badge.KILL { color: var(--kill); background: var(--kill-bg); }
+    .verdict h2 { margin: 0; font-size: 18px; font-weight: 600; }
+    .verdict .score { color: var(--muted); font-family: var(--mono); font-size: 13px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+    .card h3 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+    .why p { margin: 0; font-size: 16px; line-height: 1.6; }
+    ul.reasons { margin: 0; padding-left: 18px; }
+    ul.reasons li { margin: 4px 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+    .tile { border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+    .tile .k { font-size: 12px; color: var(--muted); }
+    .tile .v { font-family: var(--mono); font-size: 18px; margin-top: 3px; }
+    ul.check { margin: 0; padding-left: 20px; }
+    ul.check li { margin: 5px 0; }
+    .niche {
+      display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+      padding: 9px 4px; border-top: 1px solid var(--line); cursor: pointer;
+    }
+    .niche:first-child { border-top: 0; }
+    .niche:hover .nq { color: var(--accent); }
+    .niche .nq { font-weight: 600; }
+    .niche .nm { color: var(--muted); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+    footer { margin-top: 40px; color: var(--muted); font-size: 13px; text-align: center; }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>SellerHelper</h1>
+      <div class="tag">Go / Pivot / Kill verdicts for marketplace niches, grounded in live Wildberries
+        data rather than model guesswork. Enter a niche you already collected a snapshot for.</div>
+    </header>
+
+    <form id="form">
+      <div class="field grow">
+        <label for="query">Niche query</label>
+        <input id="query" name="query" placeholder="термокружка" autocomplete="off" required />
+      </div>
+      <div class="field">
+        <label for="budget">Budget, RUB (optional)</label>
+        <input id="budget" name="budget" type="number" min="0" step="1000" placeholder="100000" />
+      </div>
+      <button id="go" type="submit">Analyze</button>
+    </form>
+
+    <div id="status" class="status" hidden></div>
+    <main id="out" hidden></main>
+
+    <footer>
+      Open-core methodology &middot; the pipeline decides, the language model only explains &middot;
+      <a href="/docs">API docs</a>
+    </footer>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const form = $("form"), statusEl = $("status"), out = $("out"), go = $("go");
+    const num = (v) => Number(v).toLocaleString("en-US");
+    const pct = (v) => Math.round((v || 0) * 100) + "%";
+
+    function setStatus(html) {
+      out.hidden = true;
+      statusEl.hidden = !html;
+      statusEl.innerHTML = html || "";
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function planTiles(plan) {
+      const rows = [
+        ["Price", "price", (v) => num(v) + " ₽"],
+        ["Margin / unit", "margin_per_unit", (v) => num(v) + " ₽"],
+        ["Margin", "margin_pct", pct],
+        ["First batch", "batch_units", (v) => num(v) + " units"],
+        ["Investment", "batch_investment", (v) => num(v) + " ₽"],
+        ["Projected profit", "projected_profit", (v) => num(v) + " ₽"],
+        ["ROI", "roi_pct", pct],
+      ];
+      return rows
+        .filter(([, k]) => plan[k] !== undefined && plan[k] !== null)
+        .map(([label, k, fmt]) => `<div class="tile"><div class="k">${label}</div><div class="v">${fmt(plan[k])}</div></div>`)
+        .join("");
+    }
+
+    function render(d) {
+      const parts = [];
+      parts.push(`<div class="verdict">
+        <span class="badge ${esc(d.verdict)}">${esc(d.verdict)}</span>
+        <h2>${esc(d.query)}</h2>
+        <span class="score">combined score ${d.score ?? "-"}</span>
+      </div>`);
+
+      if (d.explanation) {
+        parts.push(`<section class="card why"><h3>Why</h3><p>${esc(d.explanation)}</p></section>`);
+      }
+      if (d.reasons && d.reasons.length) {
+        parts.push(`<section class="card"><h3>Gate outcomes</h3><ul class="reasons">${
+          d.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></section>`);
+      }
+      const plan = d.plan || {};
+      if (plan.batch_units) {
+        parts.push(`<section class="card"><h3>First-batch plan</h3><div class="grid">${planTiles(plan)}</div></section>`);
+      }
+      if (d.checklist && d.checklist.length) {
+        parts.push(`<section class="card"><h3>Launch checklist</h3><ul class="check">${
+          d.checklist.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></section>`);
+      }
+      if (d.adjacent_niches && d.adjacent_niches.length) {
+        parts.push(`<section class="card"><h3>Adjacent niches to consider</h3>${
+          d.adjacent_niches.map((n) => {
+            const price = n.price_median ? num(Math.round(n.price_median)) + " ₽" : "-";
+            return `<div class="niche" data-q="${esc(n.query)}">
+              <span class="nq">${esc(n.query)}</span>
+              <span class="nm">×${n.products} &middot; ${price} &middot; ${num(n.total_reviews)} reviews</span>
+            </div>`;
+          }).join("")}</section>`);
+      }
+
+      out.innerHTML = parts.join("");
+      statusEl.hidden = true;
+      out.hidden = false;
+      out.querySelectorAll(".niche").forEach((el) =>
+        el.addEventListener("click", () => { $("query").value = el.dataset.q; analyze(); }));
+    }
+
+    async function analyze() {
+      const query = $("query").value.trim();
+      if (!query) return;
+      const budget = $("budget").value.trim();
+      const params = new URLSearchParams({ query });
+      if (budget) params.set("budget", budget);
+      go.disabled = true;
+      setStatus("Analyzing&hellip;");
+      try {
+        const res = await fetch(`/stages/pipeline?${params}`);
+        const d = await res.json();
+        if (d.note) {
+          setStatus(`No stored snapshot for <b>${esc(query)}</b>. Collect one first, then re-run:<br>` +
+            `<code>python -m core.collectors.wb_selenium "${esc(query)}"</code>`);
+          return;
+        }
+        render(d);
+      } catch (e) {
+        setStatus(`Request failed: ${esc(e.message)}`);
+      } finally {
+        go.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", (e) => { e.preventDefault(); analyze(); });
+  </script>
+</body>
+</html>
