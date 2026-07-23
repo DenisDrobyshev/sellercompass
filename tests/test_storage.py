@@ -6,7 +6,12 @@ from sqlalchemy import create_engine
 
 from core.models.product import Product
 from core.storage.models import Base
-from core.storage.repo import latest_snapshot, save_snapshot, snapshot_totals_over_time
+from core.storage.repo import (
+    latest_snapshot,
+    overlap_review_totals,
+    save_snapshot,
+    snapshot_totals_over_time,
+)
 
 
 def _engine(tmp_path):
@@ -49,3 +54,14 @@ def test_totals_over_time(tmp_path):
     save_snapshot("q", [_p(1, 1500, 500)], engine=engine, collected_at=t2)
     totals = snapshot_totals_over_time("q", engine=engine)
     assert [v for _, v in totals] == [1000, 1500]
+
+
+def test_overlap_review_totals_uses_common_products(tmp_path):
+    engine = _engine(tmp_path)
+    t1 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    t2 = t1 + timedelta(days=1)
+    save_snapshot("q", [_p(1, 100, 500), _p(2, 200, 500)], engine=engine, collected_at=t1)
+    save_snapshot("q", [_p(2, 260, 500), _p(3, 999, 500)], engine=engine, collected_at=t2)
+    totals = overlap_review_totals("q", engine=engine)
+    # only product 2 is common to both snapshots: 200 -> 260 (products 1 and 3 ignored)
+    assert [v for _, v in totals] == [200, 260]

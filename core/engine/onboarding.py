@@ -62,8 +62,8 @@ def _print(profile: SellerProfile, reports: list[PipelineReport]) -> None:
 
 
 def _demo_db(interests: list[str], budget: float | None) -> None:
-    from core.engine.demand import compute_trend
-    from core.storage.repo import latest_snapshot, snapshot_totals_over_time
+    from core.engine.demand import trend_from_db
+    from core.storage.repo import latest_snapshot
 
     snapshots: dict[str, list[Product]] = {}
     trends: dict[str, str] = {}
@@ -71,7 +71,7 @@ def _demo_db(interests: list[str], budget: float | None) -> None:
         products = latest_snapshot(interest)
         if products:
             snapshots[interest] = products
-            trends[interest] = compute_trend(snapshot_totals_over_time(interest))
+            trends[interest] = trend_from_db(interest)
     if not snapshots:
         print("No stored snapshots for these interests. Crawl them first, for example:")
         print(f'  python -m core.collectors.wb_selenium "{interests[0]}"')

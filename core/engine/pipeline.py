@@ -57,16 +57,15 @@ def _print(report: PipelineReport) -> None:
 
 
 def _demo_db(query: str, budget: float | None) -> None:
-    from core.engine.demand import compute_trend
-    from core.storage.repo import latest_snapshot, snapshot_totals_over_time
+    from core.engine.demand import trend_from_db
+    from core.storage.repo import latest_snapshot
 
     products = latest_snapshot(query)
     if not products:
         print(f"No stored snapshot for {query!r}. Crawl first:")
         print(f'  python -m core.collectors.wb_selenium "{query}"')
         return
-    trend = compute_trend(snapshot_totals_over_time(query))
-    _print(run_pipeline(query, products, budget=budget, trend=trend))
+    _print(run_pipeline(query, products, budget=budget, trend=trend_from_db(query)))
 
 
 if __name__ == "__main__":

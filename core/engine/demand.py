@@ -89,6 +89,13 @@ def compute_trend(totals: list[tuple[datetime, int]]) -> str:
     return "flat"
 
 
+def trend_from_db(query: str) -> str:
+    """Demand trend for a query, computed over products common to first/last snapshot."""
+    from core.storage.repo import overlap_review_totals
+
+    return compute_trend(overlap_review_totals(query))
+
+
 def validate_demand(
     query: str,
     products: list[Product],
@@ -124,6 +131,8 @@ def validate_demand(
             f"price corridor ~ {m.price_p25}-{m.price_p75} RUB (median {m.price_median} RUB)"
         )
 
+    level_ok = passed  # demand level cleared the thresholds, before the trend check
+
     if trend == "declining":
         passed = False
         reasons.append("demand is declining across snapshots - fails the 'not declining' gate")
@@ -139,7 +148,7 @@ def validate_demand(
         passed=passed,
         score=demand_score(m),
         reasons=reasons,
-        evidence={**asdict(m), "trend": trend or "unknown"},
+        evidence={**asdict(m), "trend": trend or "unknown", "level_ok": level_ok},
     )
 
 
@@ -170,9 +179,9 @@ def _demo_db(query: str) -> None:
         print(f"No stored snapshot for {query!r}. Collect one first:")
         print(f'  python -m core.collectors.wb_selenium "{query}"')
         return
-    totals = snapshot_totals_over_time(query)
-    result = validate_demand(query, products, trend=compute_trend(totals))
-    _print_result(query, result, snapshots=len(totals))
+    snapshots = len(snapshot_totals_over_time(query))
+    result = validate_demand(query, products, trend=trend_from_db(query))
+    _print_result(query, result, snapshots=snapshots)
 
 
 def _print_result(query: str, result: GateResult, *, snapshots: int) -> None:

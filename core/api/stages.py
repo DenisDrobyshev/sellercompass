@@ -6,12 +6,12 @@ from fastapi import APIRouter, Query
 from core.collectors.wildberries import WildberriesCollector
 from core.engine.competition import evaluate_competition
 from core.engine.decide import decide, to_gate_result
-from core.engine.demand import compute_trend, validate_demand
+from core.engine.demand import trend_from_db, validate_demand
 from core.engine.discover import discover_from_products
 from core.engine.onboarding import SellerProfile, recommend
 from core.engine.pipeline import run_pipeline
 from core.engine.unit_economics import evaluate_unit_economics
-from core.storage.repo import latest_snapshot, snapshot_totals_over_time
+from core.storage.repo import latest_snapshot
 
 router = APIRouter(prefix="/stages", tags=["stages"])
 
@@ -22,7 +22,7 @@ def recommend_stage(interests: str = Query(..., min_length=2), budget: float | N
     queries = [q.strip() for q in interests.split(",") if q.strip()]
     snapshots = {q: latest_snapshot(q) for q in queries}
     snapshots = {q: products for q, products in snapshots.items() if products}
-    trends = {q: compute_trend(snapshot_totals_over_time(q)) for q in snapshots}
+    trends = {q: trend_from_db(q) for q in snapshots}
     reports = recommend(SellerProfile(budget=budget, interests=queries), snapshots, trends=trends)
     return {
         "budget": budget,
@@ -47,7 +47,7 @@ def pipeline(query: str = Query(..., min_length=2), budget: float | None = None)
             "query": query,
             "note": f'no stored snapshot - crawl first: python -m core.collectors.wb_selenium "{query}"',
         }
-    trend = compute_trend(snapshot_totals_over_time(query))
+    trend = trend_from_db(query)
     report = run_pipeline(query, products, budget=budget, trend=trend)
     result = to_gate_result(report.decision)
     return {
@@ -191,7 +191,7 @@ def decide_stage(query: str = Query(..., min_length=2), budget: float | None = N
             "query": query,
             "note": f'no stored snapshot - crawl first: python -m core.collectors.wb_selenium "{query}"',
         }
-    trend = compute_trend(snapshot_totals_over_time(query))
+    trend = trend_from_db(query)
     result = to_gate_result(decide(query, products, budget=budget, trend=trend))
     return {
         "stage": result.stage.value,

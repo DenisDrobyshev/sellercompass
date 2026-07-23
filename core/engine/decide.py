@@ -55,9 +55,10 @@ def decide(
         query, median(prices) if prices else 0.0, budget=budget
     )
 
-    if not demand.passed:
+    level_ok = demand.evidence.get("level_ok", demand.passed)
+    if not level_ok:
         verdict = KILL
-    elif competition.passed and economics.passed:
+    elif demand.passed and competition.passed and economics.passed:
         verdict = GO
     else:
         verdict = PIVOT
@@ -86,6 +87,8 @@ def to_gate_result(d: Decision) -> GateResult:
         reasons.append("no proven demand - do not spend money here")
     elif d.verdict == PIVOT:
         blockers = []
+        if not d.demand.passed:
+            blockers.append("demand is declining")
         if not d.competition.passed:
             blockers.append("the market has no entry window")
         if not d.economics.passed:
@@ -124,16 +127,15 @@ def _print(d: Decision) -> None:
 
 
 def _demo_db(query: str, budget: float | None) -> None:
-    from core.engine.demand import compute_trend
-    from core.storage.repo import latest_snapshot, snapshot_totals_over_time
+    from core.engine.demand import trend_from_db
+    from core.storage.repo import latest_snapshot
 
     products = latest_snapshot(query)
     if not products:
         print(f"No stored snapshot for {query!r}. Crawl first:")
         print(f'  python -m core.collectors.wb_selenium "{query}"')
         return
-    trend = compute_trend(snapshot_totals_over_time(query))
-    _print(decide(query, products, budget=budget, trend=trend))
+    _print(decide(query, products, budget=budget, trend=trend_from_db(query)))
 
 
 if __name__ == "__main__":

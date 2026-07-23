@@ -127,3 +127,43 @@ def remove_watch(query: str, *, engine: Engine | None = None) -> bool:
         session.delete(obj)
         session.commit()
     return True
+
+
+def overlap_review_totals(
+    query: str, *, engine: Engine | None = None
+) -> list[tuple[datetime, int]]:
+    """Reviews summed over products common to the earliest and latest snapshot.
+
+    Comparing the same products across snapshots removes the noise from crawls
+    that capture different product sets, so the demand trend reflects real change
+    rather than sampling variance. Returns [] with fewer than two snapshots or no
+    overlapping products.
+    """
+    engine = engine or get_engine()
+    with Session(engine) as session:
+        times = list(
+            session.scalars(
+                select(ProductObservation.collected_at)
+                .where(ProductObservation.query == query)
+                .distinct()
+                .order_by(ProductObservation.collected_at)
+            )
+        )
+        if len(times) < 2:
+            return []
+        first, last = times[0], times[-1]
+
+        def reviews_at(ts: datetime) -> dict[int, int]:
+            rows = session.execute(
+                select(ProductObservation.external_id, ProductObservation.reviews).where(
+                    ProductObservation.query == query,
+                    ProductObservation.collected_at == ts,
+                )
+            ).all()
+            return {ext: (rev or 0) for ext, rev in rows}
+
+        early, late = reviews_at(first), reviews_at(last)
+        common = set(early) & set(late)
+        if not common:
+            return []
+    return [(first, sum(early[e] for e in common)), (last, sum(late[e] for e in common))]

@@ -35,3 +35,12 @@ def test_demand_but_saturated_market_gives_pivot():
     assert d.demand.passed is True
     assert d.competition.passed is False
     assert d.verdict == PIVOT
+
+
+def test_high_demand_but_declining_pivots_not_kills():
+    # strong demand level, but the trend is declining: this must PIVOT, not KILL
+    products = [_p(2000, 4.2, brand=f"B{i}") for i in range(12)]
+    d = decide("q", products, budget=100000, trend="declining")
+    assert d.demand.evidence["level_ok"] is True
+    assert d.demand.passed is False   # a declining trend fails the demand gate
+    assert d.verdict == PIVOT         # but demand exists, so it is not a KILL
