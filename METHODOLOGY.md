@@ -40,7 +40,7 @@ Data: brand distribution, review volume per brand, price bands, ratings of leadi
 Output: concentration index, price corridor, list of openings.
 Gate: the market is not saturated and at least one opening exists.
 
-Implementation: concentration is the share of review volume held by the three largest brands, with a saturation threshold of 60 percent. Openings are listings with at least 200 reviews and a rating at or below 4.4, treated as evidence that buyers are not satisfied with the current leaders. Review text is not collected yet. `analyze_reviews` implements complaint extraction and is covered by tests, but it has no data source.
+Implementation: concentration is the share of review volume held by the three largest brands, with a saturation threshold of 60 percent. Openings are listings with at least 200 reviews and a rating at or below 4.4, treated as evidence that buyers are not satisfied with the current leaders. Raw per-review text is protected on the reviews page and is not collected. What is available is Wildberries' own aggregated review summary and the aspect facets buyers discuss; `review_digest` reads those, and they are surfaced as customer voice in the stage output. `analyze_reviews`, which mines complaints from raw negative reviews, is implemented and tested but still awaits a raw-review source.
 
 ## Stage 4. Unit economics
 

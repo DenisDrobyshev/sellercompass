@@ -14,7 +14,7 @@ The sequence is deliberate: one marketplace, one complete pipeline, real users, 
 - [x] Full-pipeline runner: one command runs all five stages (`core.engine.pipeline`, `GET /stages/pipeline`)
 - [x] Scheduled collection via a watchlist (`core.scheduler`), so trend classification has real separation in time
 - [x] Onboarding flow: a profile (budget, interests, goal) ranked into a recommendation (`core.engine.onboarding`, `GET /stages/recommend`)
-- [ ] Review feed for the complaint extraction in stage 3
+- [x] Review digest (WB's aggregated summary and aspect facets) wired into Stage 3 as customer voice; raw per-review complaint mining still awaits a source
 - [x] Docker Compose that runs with no configuration (SQLite volume, healthcheck, no `.env` required); compose config validated
 
 Completion criterion: ten beginning sellers run the pipeline end to end.

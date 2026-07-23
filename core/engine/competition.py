@@ -95,7 +95,9 @@ def find_openings(products: list[Product], *, limit: int = 5) -> list[Opening]:
     ]
 
 
-def evaluate_competition(query: str, products: list[Product]) -> GateResult:
+def evaluate_competition(
+    query: str, products: list[Product], *, voice: dict | None = None
+) -> GateResult:
     m = analyze_competition(query, products)
     openings = find_openings(products)
     reasons: list[str] = []
@@ -120,13 +122,21 @@ def evaluate_competition(query: str, products: list[Product]) -> GateResult:
             "dig into reviews for a sharper angle"
         )
 
+    if voice:
+        aspects = voice.get("aspects") or []
+        if aspects:
+            reasons.append("buyers focus on: " + ", ".join(aspects))
+        summary = voice.get("summary")
+        if summary:
+            reasons.append(f"WB review summary: {summary[:160]}")
+
     passed = (not saturated) and bool(openings)
     return GateResult(
         stage=Stage.COMPETITION,
         passed=passed,
         score=round(1 - m.top3_brand_share, 2),  # more fragmented = more entry room
         reasons=reasons,
-        evidence={**asdict(m), "openings": [asdict(o) for o in openings]},
+        evidence={**asdict(m), "openings": [asdict(o) for o in openings], "voice": voice or {}},
     )
 
 

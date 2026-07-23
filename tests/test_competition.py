@@ -42,6 +42,17 @@ def test_find_openings_flags_popular_mediocre():
     assert "unpopular" not in names       # too few reviews
 
 
+def test_voice_enriches_reasons():
+    products = [_p(1000, 4.2, brand=f"B{i}") for i in range(10)]
+    result = evaluate_competition(
+        "q", products, voice={"aspects": ["Качество", "Удобство"], "summary": "buyers like it"}
+    )
+    joined = " ".join(result.reasons)
+    assert "Качество" in joined
+    assert "buyers like it" in joined
+    assert result.evidence["voice"]["aspects"] == ["Качество", "Удобство"]
+
+
 def test_analyze_reviews_surfaces_recurring_complaints():
     reviews = [
         ("Крышка протекает, ужасная крышка", 2),

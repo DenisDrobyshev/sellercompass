@@ -24,6 +24,14 @@ _HOME = "https://www.wildberries.ru/"
 _SEARCH_PAGE = "https://www.wildberries.ru/catalog/0/search.aspx?search={q}"
 _CARD = "article.product-card"
 
+_SORT_CHIPS = {"новые", "с фото", "с видео", "по дате", "по популярности", "сначала новые"}
+_REVIEW_DIGEST_JS = r"""
+const norm = e => (e.textContent || '').replace(/\s+/g, ' ').replace(/Ещё$/, '').trim();
+const summary = [...document.querySelectorAll("[class*='generative-feedback__text']")].map(norm);
+const chips = [...document.querySelectorAll("[class*='feedbackFiltersChips'] *")].map(norm).filter(Boolean);
+return {summary: summary[0] || '', chips: [...new Set(chips)]};
+"""
+
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -114,6 +122,25 @@ class WildberriesBrowser:
                 products.append(product)
         return products
 
+    def review_digest(self, nm_id: int | str) -> dict:
+        """Read Wildberries' own review summary and the aspect facets for a product.
+
+        Raw per-review text is not reliably extractable from the reviews page, but
+        WB publishes an aggregated summary and the aspects buyers discuss, and those
+        render as plain DOM. Returns ``{"summary": str, "aspects": list[str]}``.
+        """
+        assert self._driver is not None, "use `with WildberriesBrowser() as wb:`"
+        self._warm_up()
+        self._driver.get(f"https://www.wildberries.ru/catalog/{nm_id}/feedbacks")
+        _human_pause(2.0, 3.5)
+        self._load_results(3)
+        data = self._driver.execute_script(_REVIEW_DIGEST_JS)
+        aspects = [
+            chip for chip in data.get("chips", [])
+            if 2 < len(chip) < 24 and chip.lower() not in _SORT_CHIPS
+        ]
+        return {"summary": data.get("summary", ""), "aspects": aspects}
+
     @staticmethod
     def _parse_card(card) -> Product | None:
         nm = card.get_attribute("data-nm-id")
@@ -145,11 +172,29 @@ def crawl(query: str, *, limit: int = 100, headless: bool | None = None) -> list
         return browser.search(query, limit=limit)
 
 
+def fetch_review_digest(nm_id: int | str, *, headless: bool | None = None) -> dict:
+    """Open a browser and return WB's review summary and aspects for a product."""
+    with WildberriesBrowser(headless=headless) as browser:
+        return browser.review_digest(nm_id)
+
+
 def _main() -> None:
+    argv = sys.argv[1:]
+    if argv and argv[0] == "--reviews":
+        nm = argv[1] if len(argv) > 1 else ""
+        if not nm.isdigit():
+            print("usage: python -m core.collectors.wb_selenium --reviews <nmId>")
+            return
+        digest = fetch_review_digest(nm)
+        print(f"[reviews] product {nm}")
+        print(f"  aspects buyers discuss: {', '.join(digest['aspects']) or '(none)'}")
+        print(f"  WB review summary: {digest['summary'] or '(none)'}")
+        return
+
     from core.engine.demand import validate_demand
     from core.storage.repo import save_snapshot
 
-    query = " ".join(sys.argv[1:]) or "чехол для iphone"
+    query = " ".join(argv) or "чехол для iphone"
     print(f"[spider] opening a browser and crawling Wildberries for {query!r} ...")
     try:
         products = crawl(query)
