@@ -8,11 +8,33 @@ from core.engine.competition import evaluate_competition
 from core.engine.decide import decide, to_gate_result
 from core.engine.demand import compute_trend, validate_demand
 from core.engine.discover import discover_from_products
+from core.engine.onboarding import SellerProfile, recommend
 from core.engine.pipeline import run_pipeline
 from core.engine.unit_economics import evaluate_unit_economics
 from core.storage.repo import latest_snapshot, snapshot_totals_over_time
 
 router = APIRouter(prefix="/stages", tags=["stages"])
+
+
+@router.get("/recommend")
+def recommend_stage(interests: str = Query(..., min_length=2), budget: float | None = None) -> dict:
+    """Onboarding: rank the given comma-separated interests using stored snapshots."""
+    queries = [q.strip() for q in interests.split(",") if q.strip()]
+    snapshots = {q: latest_snapshot(q) for q in queries}
+    snapshots = {q: products for q, products in snapshots.items() if products}
+    trends = {q: compute_trend(snapshot_totals_over_time(q)) for q in snapshots}
+    reports = recommend(SellerProfile(budget=budget, interests=queries), snapshots, trends=trends)
+    return {
+        "budget": budget,
+        "ranking": [
+            {
+                "query": r.query,
+                "verdict": r.decision.verdict,
+                "score": to_gate_result(r.decision).score,
+            }
+            for r in reports
+        ],
+    }
 
 
 @router.get("/pipeline")

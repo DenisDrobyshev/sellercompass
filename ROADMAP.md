@@ -13,7 +13,7 @@ The sequence is deliberate: one marketplace, one complete pipeline, real users, 
 - [x] Stage 5, Decide: `GET /stages/decide`
 - [x] Full-pipeline runner: one command runs all five stages (`core.engine.pipeline`, `GET /stages/pipeline`)
 - [x] Scheduled collection via a watchlist (`core.scheduler`), so trend classification has real separation in time
-- [ ] Onboarding flow that collects budget, interests and goal
+- [x] Onboarding flow: a profile (budget, interests, goal) ranked into a recommendation (`core.engine.onboarding`, `GET /stages/recommend`)
 - [ ] Review feed for the complaint extraction in stage 3
 - [ ] Verified single-command Docker Compose deployment
 
